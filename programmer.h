@@ -654,6 +654,7 @@ int register_programmer(struct registered_programmer *pgm);
 /* serprog.c */
 #if CONFIG_SERPROG == 1
 int serprog_init(void);
+void *serprog_map(const char *descr, uintptr_t phys_addr, size_t len);
 void serprog_delay(int usecs);
 #endif
 
