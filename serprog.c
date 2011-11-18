@@ -733,6 +733,19 @@ int serprog_init(void)
 	return 0;
 }
 
+void *serprog_map(const char *descr, uintptr_t phys_addr, size_t len)
+{
+	if ((phys_addr & 0xFF000000) == 0xFF000000) {
+		msg_pspew("Serprog map '%s' giving low 24 bits of phys_addr (0x%06X)\n",
+			descr,(unsigned int)(phys_addr & 0xFFFFFF));
+		return (void*)(phys_addr & 0xFFFFFF);
+	} else {
+		msg_pdbg("Serprog-incompatible mapping '%s' phys_addr 0x%08X len %d, returning NULL\n",
+			descr,(unsigned int)phys_addr,len);
+		return NULL;
+	}
+}
+
 /* Move an in flashrom buffer existing write-n operation to the on-device operation buffer. */
 static int sp_pass_writen(void)
 {
