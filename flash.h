@@ -29,6 +29,7 @@
 #include <stdint.h>
 #include <stddef.h>
 #include <stdbool.h>
+#include <stdarg.h>
 #ifdef _WIN32
 #include <windows.h>
 #undef min
@@ -40,6 +41,7 @@
 /* Error codes */
 #define ERROR_OOM	-100
 #define TIMEOUT_ERROR	-101
+struct flashctx;
 
 /* TODO: check using code for correct usage of types */
 typedef uintptr_t chipaddr;
@@ -53,10 +55,15 @@ typedef uint32_t chipsize_t; /* Able to store the number of bytes of any support
 #define PRIxCHIPADDR "06"PRIx32
 #define PRIuCHIPSIZE PRIu32
 
+enum highlevel_cmd {
+	HL_ID_TOGGLE_READY_JEDEC = 1
+};
+
 int register_shutdown(int (*function) (void *data), void *data);
 void *programmer_map_flash_region(const char *descr, uintptr_t phys_addr, size_t len);
 void programmer_unmap_flash_region(void *virt_addr, size_t len);
 void programmer_delay(int usecs);
+int programmer_highlevel(const struct flashctx *flash, enum highlevel_cmd id, ...);
 
 #define ARRAY_SIZE(a) (sizeof(a) / sizeof((a)[0]))
 
@@ -120,7 +127,6 @@ enum write_granularity {
 #define FEATURE_OTP		(1 << 8)
 #define FEATURE_QPI		(1 << 9)
 
-struct flashctx;
 typedef int (erasefunc_t)(struct flashctx *flash, unsigned int addr, unsigned int blocklen);
 
 struct flashchip {

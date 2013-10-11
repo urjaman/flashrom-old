@@ -121,6 +121,8 @@ struct programmer_entry {
 	void (*unmap_flash_region) (void *virt_addr, size_t len);
 
 	void (*delay) (int usecs);
+
+	int (*highlevel) (const struct flashctx *flash, enum highlevel_cmd id, va_list ap);
 };
 
 extern const struct programmer_entry programmer_table[];
@@ -655,6 +657,7 @@ int register_programmer(struct registered_programmer *pgm);
 #if CONFIG_SERPROG == 1
 int serprog_init(void);
 void serprog_delay(int usecs);
+int serprog_highlevel(const struct flashctx *flash, enum highlevel_cmd id, va_list ap);
 #endif
 
 /* serial.c */

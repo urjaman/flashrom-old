@@ -886,6 +886,47 @@ void serprog_delay(int usecs)
 	sp_prev_was_write = 0;
 }
 
+int serprog_highlevel(const struct flashctx *flash, enum highlevel_cmd id, va_list ap)
+{
+	switch (id) {
+		default: /* Any new ids, by default not handled. */
+			return 0;
+		case HL_ID_TOGGLE_READY_JEDEC:
+			if (sp_check_commandavail(S_CMD_O_TOGGLERDY)) {
+
+				uint8_t buf[7];
+				if ((sp_max_write_n) && (sp_write_n_bytes))
+					sp_pass_writen();
+				sp_check_opbuf_usage(8);
+				unsigned int addr = va_arg(ap,unsigned int);
+				int usecs = va_arg(ap,int);
+				buf[0] = ((usecs >> 0) & 0xFF);
+				buf[1] = ((usecs >> 8) & 0xFF);
+				buf[2] = ((usecs >> 16) & 0xFF);
+				buf[3] = ((usecs >> 24) & 0xFF);
+				buf[4] = ((addr >> 0) & 0xFF);
+				buf[5] = ((addr >> 8) & 0xFF);
+				buf[6] = ((addr >> 16) & 0xFF);
+				sp_stream_buffer_op(S_CMD_O_TOGGLERDY, 7, buf);
+				sp_opbuf_usage += 8;
+				sp_prev_was_write = 0;
+				msg_pspew(MSGHEADER "highlevel toggle ready dly=%d addr=0x%x\n",
+					usecs,addr);
+				if (sp_opbuf_usage > (sp_device_opbuf_size/3)) {
+					/* Since this was previously a natural exec point,
+					   execute if we have more than 33% of opbuf in use. */
+					/* FIXME: Return error. */
+					sp_execute_opbuf_noflush();
+				}
+				return 1; /* Handled by programmer. */	
+			}
+			return 0;
+		
+	}
+	/* If you accidentally fall here, not handled. */
+	return 0;
+}
+
 static int serprog_spi_send_command(struct flashctx *flash,
 				    unsigned int writecnt, unsigned int readcnt,
 				    const unsigned char *writearr,

@@ -194,6 +194,7 @@ const struct programmer_entry programmer_table[] = {
 		.map_flash_region	= fallback_map,
 		.unmap_flash_region	= fallback_unmap,
 		.delay			= serprog_delay,
+		.highlevel		= serprog_highlevel,
 	},
 #endif
 
@@ -488,6 +489,17 @@ void chip_readn(const struct flashctx *flash, uint8_t *buf, chipaddr addr,
 void programmer_delay(int usecs)
 {
 	programmer_table[programmer].delay(usecs);
+}
+
+int programmer_highlevel(const struct flashctx *flash, enum highlevel_cmd id, ...)
+{
+	int rv = 0;
+	va_list ap;
+	va_start(ap,id);
+	if (programmer_table[programmer].highlevel)
+		rv = programmer_table[programmer].highlevel(flash,id,ap);
+	va_end(ap);
+	return rv;
 }
 
 void map_flash_registers(struct flashctx *flash)

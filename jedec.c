@@ -22,6 +22,7 @@
  * Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301 USA
  */
 
+#include <stdlib.h>
 #include "flash.h"
 
 #define MAX_REFLASH_TRIES 0x10
@@ -42,6 +43,8 @@ static void toggle_ready_jedec_common(const struct flashctx *flash,
 {
 	unsigned int i = 0;
 	uint8_t tmp1, tmp2;
+
+	if (programmer_highlevel(flash, HL_ID_TOGGLE_READY_JEDEC, dst, delay)) return;
 
 	tmp1 = chip_readb(flash, dst) & 0x40;
 

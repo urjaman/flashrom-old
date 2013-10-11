@@ -35,6 +35,8 @@ COMMAND	Description			Parameters			Return Value
 					 + slen bytes of data
 0x14	Set SPI clock frequency in Hz	32-bit requested frequency	ACK + 32-bit set frequency / NAK
 0x15	Toggle flash chip pin drivers	8-bit (0 disable, else enable)	ACK / NAK
+0x16	Write to opbuf: Toggle Ready	32-bit delay + 24-bit addr	ACK / NAK (NOTE: 8 bytes in opbuf)
+	JEDEC
 0x??	unimplemented command - invalid.
 
 
