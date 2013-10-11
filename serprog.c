@@ -907,8 +907,10 @@ static int serprog_spi_send_command(struct flashctx *flash,
 	unsigned char *parmbuf;
 	int ret;
 	msg_pspew("%s, writecnt=%i, readcnt=%i\n", __func__, writecnt, readcnt);
+
+	/* Stream the spi operation (as read-n above). */
 	if ((sp_opbuf_usage) || (sp_max_write_n && sp_write_n_bytes)) {
-		if (sp_execute_opbuf() != 0) {
+		if (sp_execute_opbuf_noflush() != 0) {
 			msg_perr("Error: could not execute command buffer before sending SPI commands.\n");
 			return 1;
 		}
@@ -926,8 +928,20 @@ static int serprog_spi_send_command(struct flashctx *flash,
 	parmbuf[4] = (readcnt >> 8) & 0xFF;
 	parmbuf[5] = (readcnt >> 16) & 0xFF;
 	memcpy(parmbuf + 6, writearr, writecnt);
-	ret = sp_docommand(S_CMD_O_SPIOP, writecnt + 6, parmbuf, readcnt,
-			   readarr);
+
+	ret = sp_stream_buffer_op(S_CMD_O_SPIOP, writecnt + 6, parmbuf);
+
+	if ((!ret)&&(readcnt)) {
+		if (sp_flush_stream() != 0) {
+			free(parmbuf);
+			return 1;
+		}
+		if (serialport_read(readarr, readcnt) != 0) {
+			free(parmbuf);
+			msg_perr(MSGHEADER "Error: cannot read spiop data");
+			return 1;
+		}
+	}
 	free(parmbuf);
 	return ret;
 }
