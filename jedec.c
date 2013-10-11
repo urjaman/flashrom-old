@@ -332,10 +332,9 @@ static int erase_chip_jedec_common(struct flashctx *flash, unsigned int mask)
 	return 0;
 }
 
-static int write_byte_program_jedec_common(struct flashctx *flash, uint8_t *src,
+static int write_byte_program_jedec_noretry(struct flashctx *flash, uint8_t *src,
 					   chipaddr dst, unsigned int mask)
 {
-	int tried = 0, failed = 0;
 	chipaddr bios = flash->virtual_memory;
 
 	/* If the data is 0xFF, don't program it and don't complain. */
@@ -343,7 +342,6 @@ static int write_byte_program_jedec_common(struct flashctx *flash, uint8_t *src,
 		return 0;
 	}
 
-retry:
 	/* Issue JEDEC Byte Program command */
 	start_program_jedec_common(flash, mask);
 
@@ -351,38 +349,67 @@ retry:
 	chip_writeb(flash, *src, dst);
 	toggle_ready_jedec(flash, bios);
 
-	if (chip_readb(flash, dst) != *src && tried++ < MAX_REFLASH_TRIES) {
-		goto retry;
-	}
+	/* Verify removed. Check in a higher level function. */
 
-	if (tried >= MAX_REFLASH_TRIES)
-		failed = 1;
-
-	return failed;
+	return 0;
 }
 
 /* chunksize is 1 */
 int write_jedec_1(struct flashctx *flash, uint8_t *src, unsigned int start,
 		  unsigned int len)
 {
+	
+	int tried = 0;
 	int i, failed = 0;
 	chipaddr dst = flash->virtual_memory + start;
-	chipaddr olddst;
 	unsigned int mask;
-
 	mask = getaddrmask(flash->chip);
-
-	olddst = dst;
-	for (i = 0; i < len; i++) {
-		if (write_byte_program_jedec_common(flash, src, dst, mask))
-			failed = 1;
-		dst++, src++;
+	uint8_t *readbuf = malloc(len);
+	if (!readbuf) {
+		msg_gerr("Could not allocate memory!\n");
+		exit(1);
 	}
+
+	for (i = 0; i < len; i++) {
+		write_byte_program_jedec_noretry(flash, src+i, dst+i, mask);
+	}
+	int rstart = 0;
+	int rlen = len;
+retry:
+	failed = flash->chip->read(flash, readbuf, start+rstart, rlen);
+	if (failed) {
+		msg_gerr("Verification impossible because read failed "
+			 "at 0x%x (len 0x%x)\n", start, len);
+		free(readbuf);
+		return failed;
+	}
+	int inc_tried = 0;
+	for (i=rstart;i<len;i++) {
+		if (readbuf[i] != src[i]) {
+			if (!inc_tried) {
+				rstart = i;
+			}
+			rlen = (i - rstart)+1;
+			inc_tried = 1;
+			write_byte_program_jedec_noretry(flash, src+i, dst+i, mask);
+		}
+	}
+	if (inc_tried) {
+		tried++;
+		if (tried < MAX_REFLASH_TRIES) {
+			goto retry;
+		}
+		failed = 1;
+	}
+	free(readbuf);
+
 	if (failed)
-		msg_cerr(" writing sector at 0x%" PRIxPTR " failed!\n", olddst);
+		msg_cerr(" writing sector at 0x%" PRIxPTR " failed!\n", dst);
 
 	return failed;
+
 }
+
 
 static int write_page_write_jedec_common(struct flashctx *flash, uint8_t *src,
 					 unsigned int start, unsigned int page_size)
