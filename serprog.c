@@ -204,12 +204,40 @@ static int sp_automatic_cmdcheck(uint8_t cmd)
 	return 0;
 }
 
+static int sp_flush_stream(void)
+{
+	if (sp_streamed_transmit_ops)
+		do {
+			unsigned char c;
+			if (serialport_read(&c, 1) != 0) {
+				msg_perr("Error: cannot read from device (flushing stream)");
+				return 1;
+			}
+			if (c == S_NAK) {
+				msg_perr("Error: NAK to a stream buffer operation\n");
+				return 1;
+			}
+			if (c != S_ACK) {
+				msg_perr("Error: Invalid reply 0x%02X from device\n", c);
+				return 1;
+			}
+		} while (--sp_streamed_transmit_ops);
+	sp_streamed_transmit_ops = 0;
+	sp_streamed_transmit_bytes = 0;
+	return 0;
+}
+
 static int sp_docommand(uint8_t command, uint32_t parmlen,
 			uint8_t *params, uint32_t retlen, void *retparms)
 {
 	unsigned char c;
 	if (sp_automatic_cmdcheck(command))
 		return 1;
+
+	if (sp_flush_stream() != 0) {
+		return 1;
+	}
+
 	if (serialport_write(&command, 1) != 0) {
 		msg_perr("Error: cannot write op code: %s\n", strerror(errno));
 		return 1;
@@ -234,29 +262,6 @@ static int sp_docommand(uint8_t command, uint32_t parmlen,
 			return 1;
 		}
 	}
-	return 0;
-}
-
-static int sp_flush_stream(void)
-{
-	if (sp_streamed_transmit_ops)
-		do {
-			unsigned char c;
-			if (serialport_read(&c, 1) != 0) {
-				msg_perr("Error: cannot read from device (flushing stream)");
-				return 1;
-			}
-			if (c == S_NAK) {
-				msg_perr("Error: NAK to a stream buffer operation\n");
-				return 1;
-			}
-			if (c != S_ACK) {
-				msg_perr("Error: Invalid reply 0x%02X from device\n", c);
-				return 1;
-			}
-		} while (--sp_streamed_transmit_ops);
-	sp_streamed_transmit_ops = 0;
-	sp_streamed_transmit_bytes = 0;
 	return 0;
 }
 
