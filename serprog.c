@@ -75,6 +75,9 @@ static uint32_t sp_write_n_bytes = 0;
 /* sp_streamed_* used for flow control checking */
 static int sp_streamed_transmit_ops = 0;
 static int sp_streamed_transmit_bytes = 0;
+static uint32_t * sp_stream_txop_sizes = NULL; /* Size: ..._serbuf_size * sizeof uint32_t */
+static int sp_stream_txop_wroff = 0; /* Used when sending. */
+static int sp_stream_txop_rdoff = 0; /* Used when receiving ACKs */
 
 /* sp_opbuf_usage used for counting the amount of
 	on-device operation buffer used */
@@ -204,8 +207,28 @@ static int sp_automatic_cmdcheck(uint8_t cmd)
 	return 0;
 }
 
-static int sp_flush_stream(void)
+static void sp_stream_add_txop(uint32_t size)
 {
+	sp_streamed_transmit_ops += 1;
+	sp_streamed_transmit_bytes += size;
+	sp_stream_txop_sizes[sp_stream_txop_wroff++] = size;
+	if (sp_stream_txop_wroff >= sp_device_serbuf_size)
+		sp_stream_txop_wroff = 0;
+}
+
+static uint32_t sp_stream_rm_txop(void)
+{
+	uint32_t size = sp_stream_txop_sizes[sp_stream_txop_rdoff++];
+	if (sp_stream_txop_rdoff >= sp_device_serbuf_size)
+		sp_stream_txop_rdoff = 0;
+	sp_streamed_transmit_bytes -= size;
+	sp_streamed_transmit_ops -= 1;
+	return size;
+}
+
+static int sp_stream_free_bytes(uint32_t need_freed)
+{
+	uint32_t freed = 0;
 	if (sp_streamed_transmit_ops)
 		do {
 			unsigned char c;
@@ -221,7 +244,37 @@ static int sp_flush_stream(void)
 				msg_perr("Error: Invalid reply 0x%02X from device\n", c);
 				return 1;
 			}
-		} while (--sp_streamed_transmit_ops);
+			freed += sp_stream_rm_txop();
+			if (freed >= need_freed) break;
+		} while (sp_streamed_transmit_ops);
+	return 0;
+}
+
+static int sp_verify_stream_free(uint32_t size)
+{
+	/* Allow for device accounting "error" of 1 byte. There might be many
+	   serial implementations with an n byte buffer, but that fail if it
+	   were to be full with n bytes (wroff==rdoff). */
+	uint32_t bytes_free = (sp_device_serbuf_size - sp_streamed_transmit_bytes)-1;
+	if (bytes_free < size) {
+		uint32_t need_freed = size - bytes_free;
+		return sp_stream_free_bytes(need_freed);
+	}
+	return 0;
+}
+
+static int sp_flush_stream(void)
+{
+	msg_pspew(MSGHEADER "flushing stream (%d ops, %d bytes)\n",
+		sp_streamed_transmit_ops, sp_streamed_transmit_bytes);
+
+	if (sp_stream_free_bytes(sp_streamed_transmit_bytes))
+		return 1;
+
+	if (sp_streamed_transmit_bytes != 0)
+		msg_pdbg(MSGHEADER "stream size accounting error (%d bytes)\n",
+			sp_streamed_transmit_bytes);
+
 	sp_streamed_transmit_ops = 0;
 	sp_streamed_transmit_bytes = 0;
 	return 0;
@@ -265,6 +318,7 @@ static int sp_docommand(uint8_t command, uint32_t parmlen,
 	return 0;
 }
 
+
 static int sp_stream_buffer_op(uint8_t cmd, uint32_t parmlen, uint8_t *parms)
 {
 	uint8_t *sp;
@@ -279,19 +333,15 @@ static int sp_stream_buffer_op(uint8_t cmd, uint32_t parmlen, uint8_t *parms)
 	sp[0] = cmd;
 	memcpy(&(sp[1]), parms, parmlen);
 
-	if (sp_streamed_transmit_bytes >= (1 + parmlen + sp_device_serbuf_size)) {
-		if (sp_flush_stream() != 0) {
-			free(sp);
-			return 1;
-		}
-	}
+	if (sp_verify_stream_free(1+parmlen))
+		return 1;
+
 	if (serialport_write(sp, 1 + parmlen) != 0) {
 		msg_perr("Error: cannot write command\n");
 		free(sp);
 		return 1;
 	}
-	sp_streamed_transmit_ops += 1;
-	sp_streamed_transmit_bytes += 1 + parmlen;
+	sp_stream_add_txop(1+parmlen);
 
 	free(sp);
 	return 0;
@@ -634,6 +684,13 @@ int serprog_init(void)
 	msg_pdbg(MSGHEADER "Serial buffer size is %d\n",
 		     sp_device_serbuf_size);
 
+	sp_stream_txop_sizes = malloc(sp_device_serbuf_size*sizeof(uint32_t));
+	if (!sp_stream_txop_sizes) {
+		msg_perr("Error: cannot allocate memory for "
+			 "serial tx size history buffer\n");
+		return 1;
+	}
+
 	if (sp_check_commandavail(S_CMD_O_INIT)) {
 		/* This would be inconsistent. */
 		if (sp_check_commandavail(S_CMD_O_EXEC) == 0) {
@@ -681,11 +738,9 @@ static int sp_pass_writen(void)
 {
 	unsigned char header[7];
 	msg_pspew(MSGHEADER "Passing write-n bytes=%d addr=0x%x\n", sp_write_n_bytes, sp_write_n_addr);
-	if (sp_streamed_transmit_bytes >= (7 + sp_write_n_bytes + sp_device_serbuf_size)) {
-		if (sp_flush_stream() != 0) {
-			return 1;
-		}
-	}
+	if (sp_verify_stream_free(7+sp_write_n_bytes))
+		return 1;
+
 	/* In case it's just a single byte send it as a single write. */
 	if (sp_write_n_bytes == 1) {
 		sp_write_n_bytes = 0;
@@ -713,8 +768,7 @@ static int sp_pass_writen(void)
 		msg_perr(MSGHEADER "Error: cannot write write-n data");
 		return 1;
 	}
-	sp_streamed_transmit_bytes += 7 + sp_write_n_bytes;
-	sp_streamed_transmit_ops += 1;
+	sp_stream_add_txop(7+sp_write_n_bytes);
 	sp_opbuf_usage += 7 + sp_write_n_bytes;
 	sp_write_n_bytes = 0;
 	sp_prev_was_write = 0;
@@ -765,6 +819,10 @@ static int serprog_shutdown(void *data)
 	serialport_shutdown(&sp_fd);
 	if (sp_max_write_n)
 		free(sp_write_n_buf);
+
+	if (sp_stream_txop_sizes)
+		free(sp_stream_txop_sizes);
+
 	return 0;
 }
 
