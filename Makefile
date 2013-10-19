@@ -52,6 +52,7 @@ DOSLIBS_BASE ?= ..
 # evaluated below, namely those that enable/disable the various programmers).
 # Compilation will fail for unspecified values.
 CONFIG_DEFAULT_PROGRAMMER ?= PROGRAMMER_INVALID
+CONFIG_DEFAULT_PROGRAMMER_ARGS ?= ""
 
 # If your compiler spits out excessive warnings, run make WARNERROR=no
 # You shouldn't have to change this flag.
@@ -470,7 +471,7 @@ CONFIG_INTERNAL_DMI ?= yes
 # Programmer drivers and programmer support infrastructure.
 # Depending on the CONFIG_* variables set and verified above we set compiler flags and parameters below.
 
-FEATURE_CFLAGS += -D'CONFIG_DEFAULT_PROGRAMMER=$(CONFIG_DEFAULT_PROGRAMMER)'
+FEATURE_CFLAGS += -D'CONFIG_DEFAULT_PROGRAMMER=$(CONFIG_DEFAULT_PROGRAMMER)' -D'CONFIG_DEFAULT_PROGRAMMER_ARGS=$(CONFIG_DEFAULT_PROGRAMMER_ARGS)'
 
 ifeq ($(CONFIG_INTERNAL), yes)
 FEATURE_CFLAGS += -D'CONFIG_INTERNAL=1'

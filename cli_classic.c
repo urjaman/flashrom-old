@@ -397,8 +397,11 @@ int main(int argc, char *argv[])
 	if (prog == PROGRAMMER_INVALID) {
 		if (CONFIG_DEFAULT_PROGRAMMER != PROGRAMMER_INVALID) {
 			prog = CONFIG_DEFAULT_PROGRAMMER;
-			msg_pinfo("Using default programmer \"%s\".\n",
-				  programmer_table[CONFIG_DEFAULT_PROGRAMMER].name);
+			if (strlen(CONFIG_DEFAULT_PROGRAMMER_ARGS) != 0)
+				pparam = strdup(CONFIG_DEFAULT_PROGRAMMER_ARGS);
+			msg_pinfo("Using default programmer \"%s\" with arguments \"%s\".\n",
+				  programmer_table[CONFIG_DEFAULT_PROGRAMMER].name,
+				  pparam == NULL ? "" : pparam);
 		} else {
 			msg_perr("Please select a programmer with the --programmer parameter.\n"
 				 "Previously this was not necessary because there was a default set.\n"
