@@ -487,6 +487,7 @@ void chip_readn(const struct flashctx *flash, uint8_t *buf, chipaddr addr,
 
 void programmer_delay(int usecs)
 {
+	if (!usecs) return; /* Filter unnecessary 0 usec delays from all programmers. */
 	programmer_table[programmer].delay(usecs);
 }
 
