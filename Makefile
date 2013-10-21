@@ -33,7 +33,7 @@ CC      ?= gcc
 STRIP   ?= strip
 INSTALL = install
 DIFF    = diff
-PREFIX  ?= /usr/local
+PREFIX  ?= /usr
 MANDIR  ?= $(PREFIX)/share/man
 CFLAGS  ?= -Os -Wall -Wshadow
 EXPORTDIR ?= .
@@ -51,8 +51,8 @@ DOSLIBS_BASE ?= ..
 # values are those specified in enum programmer in programmer.h (which depend on other CONFIG_* options
 # evaluated below, namely those that enable/disable the various programmers).
 # Compilation will fail for unspecified values.
-CONFIG_DEFAULT_PROGRAMMER ?= PROGRAMMER_INVALID
-CONFIG_DEFAULT_PROGRAMMER_ARGS ?= ""
+CONFIG_DEFAULT_PROGRAMMER ?= PROGRAMMER_SERPROG
+CONFIG_DEFAULT_PROGRAMMER_ARGS ?= "dev=/dev/ttyUSB0:1500000"
 
 # If your compiler spits out excessive warnings, run make WARNERROR=no
 # You shouldn't have to change this flag.
